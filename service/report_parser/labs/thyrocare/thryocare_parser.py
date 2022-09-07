@@ -1,6 +1,6 @@
 import re
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from dataclasses import fields
 from datetime import datetime
 
@@ -10,7 +10,7 @@ from fitz import Rect, CheckRect
 from model.objects import TestField, ReportMeta, Report
 from service.report_parser.labs.thyrocare.entities import Header
 from service.report_parser.report_parser_base import ReportParser
-from service.report_parser.labs.thyrocare.helper import parse_headers, is_float, parse_range
+from service.report_parser.labs.thyrocare.helper import parse_headers, is_float, parse_range, merge_ranges
 from service.report_parser.labs.thyrocare.test_profiles import test_profiles
 from model.enums import Laboratories
 from config.base import config
@@ -140,10 +140,74 @@ class ThyroCareReportParser(ReportParser):
                                        units=units_val,
                                        normal_range=parse_range(normal_range))
 
+                if not header.normal_range and not header.reference_range:
+                    test_field.reference_range = self._find_reference_range(name_rect, units_val, page)
+
                 if test_field.value:
                     test_fields.append(test_field)
 
         return test_fields
+
+    def _find_reference_range(self, name_rect: Rect, units: str, page):
+        def goto_next_line(rect, max_try: int = 5):
+            val = ''
+            next_rect = name_rect
+            i = 0
+            while not val and i < max_try:
+                next_rect = Rect(rect.x0, rect.y1-3, page.rect.x1 // 2, 2 * rect.y1 - rect.y0+3)
+                val = page.get_textbox(next_rect)
+                rect = next_rect
+                i += 1
+            return next_rect
+
+        def calc_range(val: str) -> List:
+            val = val.replace(units, '').replace('=', '').replace('\n', ' ')
+            range_pattern = r"([0-9\.]+)?\s*([<>-])\s*([0-9\.]+)"
+            ranges = []
+
+            for match in re.finditer(range_pattern, val):
+                start, end = parse_range(match.group(0))
+                left = f'([^:]+)[:-]\s*{match.group(0)}'
+                m = re.search(left, val)
+                if m:
+                    name = re.sub(r'[^\w\s]|\d', '', m.group(1).strip()).strip()
+                    ranges.append([name, [start, end]])
+                    continue
+                right = f'{match.group(0)}\s*[:-]([^:]+)'
+                m = re.search(right, val)
+                if m:
+                    name = re.sub(r'[^\w\s]|\d', '', m.group(1).strip()).strip()
+                    ranges.append([name, [start, end]])
+                    continue
+
+                if start or end:
+                    ranges.append(['NORMAL', [start, end]])
+            return ranges
+
+        def re_calibrate(rect: Rect):
+            text = page.get_textbox(rect)
+            rects = page.search_for(text)
+            rects.sort(key=lambda x: (x.x0 - rect.x0) ** 2 + (x.y0 - rect.y0) ** 2)
+            return Rect(rect.x0, rects[0].y0, rect.x1, rects[0].y1)
+
+        reference_ranges = []
+        next_line = goto_next_line(name_rect)
+        next_line = re_calibrate(next_line)
+        next_line_val = page.get_textbox(next_line)
+        if re.search("reference range", next_line_val, re.I):
+            range_line = goto_next_line(next_line)
+            range_line = re_calibrate(range_line)
+            range_val = page.get_textbox(range_line)
+            ref_range = calc_range(range_val)
+            while ref_range:
+                ref_range = merge_ranges(ref_range)
+                if ref_range:
+                    reference_ranges.extend(ref_range)
+                range_line = goto_next_line(range_line)
+                range_line = re_calibrate(range_line)
+                range_val = page.get_textbox(range_line)
+                ref_range = calc_range(range_val)
+        return reference_ranges if reference_ranges else None
 
     def _annotate_page(self, page, rects):
         if not config.DEBUG:

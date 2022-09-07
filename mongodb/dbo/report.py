@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Union
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -21,6 +21,7 @@ class TestDTO(BaseModel):
     value: float
     units: str
     normal_range: list
+    reference_range: Union[list, None]
 
 
 class ProfileTestDTO(BaseModel):

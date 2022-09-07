@@ -20,6 +20,7 @@ class TestField(BaseModel):
     value: float
     units: str
     normal_range: Any
+    reference_range: Any
 
 
 class Report(BaseModel):

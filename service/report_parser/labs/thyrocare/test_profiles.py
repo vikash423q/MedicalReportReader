@@ -1,9 +1,9 @@
 from service.report_parser.labs.thyrocare.entities import TestProfile
 
 IRON_DEFICIENCY = TestProfile("IRON DEFICIENCY",
-                              tests=["% TRANSFERRIN SATURATION",
+                              tests=["IRON",
                                      "TOTAL IRON BINDING CAPACITY",
-                                     "IRON",
+                                     "% TRANSFERRIN SATURATION",
                                      "FERRITIN"])
 
 LIVER = TestProfile("LIVER",
@@ -145,7 +145,7 @@ THYROID = TestProfile("THYROID", tests=["TOTAL TRIIODOTHYRONINE",
                                         "TOTAL THYROXINE",
                                         "THYROID STIMULATING HORMONE"])
 
-HORMONE = TestProfile("HORMONE", tests=["TESTOSTERONE"])
+HORMONE = TestProfile("HORMONE", tests=["TESTOSTERONE", "FREE TESTOSTERONE"])
 
 VITAMINS = TestProfile("VITAMINS", tests=["VITAMIN A",
                                           "VITAMIN B-12",

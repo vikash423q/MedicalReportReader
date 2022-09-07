@@ -1,8 +1,9 @@
+import math
 from service.report_parser.labs.thyrocare.entities import Header
 
 
 def parse_headers(page) -> Header:
-    headers = ["TEST NAME", "TECHNOLOGY", "VALUE", "UNITS", "NORMAL RANGE", "REFERENCE RANGE"]
+    headers = ["TEST NAME", "TECHNOLOGY", "VALUE", "UNITS", "NORMAL RANGE", "REFERENCE RANGE", "REF. RANGE"]
 
     header_names = []
     header_boxes = []
@@ -42,7 +43,7 @@ def parse_headers(page) -> Header:
             hd.units = box
         if name == "NORMAL RANGE":
             hd.normal_range = box
-        if name == "REFERENCE RANGE":
+        if name in ["REFERENCE RANGE", "REF. RANGE"]:
             hd.reference_range = box
 
     return hd
@@ -67,10 +68,52 @@ def parse_range(value: str):
         end = float(e) if is_float(e) else None
     if ">" in value:
         s, e = value.split(">")[0], value.split(">")[1]
-        start = float(s) if is_float(s) else None
-        end = float(e) if is_float(e) else None
+        end = float(s) if is_float(s) else None
+        start = float(e) if is_float(e) else None
     if "-" in value:
         s, e = value.split("-")[0], value.split("-")[1]
         start = float(s) if is_float(s) else None
         end = float(e) if is_float(e) else None
     return start, end
+
+
+def merge_ranges(ranges: list):
+    name_range = {}
+    for range_ in ranges:
+        name = range_[0]
+        name_range.setdefault(name, [])
+        name_range[name].append(range_)
+
+    for name, ranges in name_range.items():
+        if not ranges:
+            continue
+
+        ranges.sort(key=lambda r: (-1 if r[1][0] is None else r[1][0], math.inf if r[1][1] is None else r[1][1]))
+
+        merged = []
+        for i in range(len(ranges)-1):
+            nxt = list(ranges[i+1][1])
+            curr = list(ranges[i][1])
+
+            cs, ce = -1 if curr[0] is None else curr[0], math.inf if curr[1] is None else curr[1]
+            ns, ne = -1 if nxt[1] is None else nxt[0], math.inf if nxt[1] is None else nxt[1]
+
+            if curr[1] > nxt[0]:
+                rs = min(ns, cs)
+                re = max(ne, ce)
+                ranges[i+1][1] = [None if rs == -1 else rs, None if re == math.inf else re]
+            else:
+                merged.append(ranges[i])
+
+        if ranges[-1][1] != [None, None]:
+            merged.append(ranges[-1])
+        name_range[name] = merged
+
+    result = []
+    keys = list(name_range.keys())
+    for name in keys:
+        if not name_range[name]:
+            continue
+        result.extend(name_range[name])
+
+    return result

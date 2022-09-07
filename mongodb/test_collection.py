@@ -57,3 +57,9 @@ def retrieve_tests_by_report_id(report_id: Union[str, ObjectId]) -> List[Profile
         doc["id"] = doc["_id"]
         tests.append(ProfileTestDTO(**doc))
     return tests
+
+
+def delete_tests_with_report_id(report_id: Union[str, ObjectId]):
+    if isinstance(report_id, str):
+        report_id = ObjectId(report_id)
+    return tests_collection.delete_many(dict(report_id=report_id))
